@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CrimQuiz – BS Criminology Reviewer</title>
+<style>
+:root{--bg:#f6f5f1;--sf:#fff;--tx:#1d2330;--mu:#6a7080;--ac:#1f3a68;--ok:#1b7a47;--no:#b42318;--bd:#dcdad2}
+@media (prefers-color-scheme:dark){:root{--bg:#12161f;--sf:#1b2130;--tx:#e8eaf0;--mu:#99a0b2;--ac:#7fa6ee;--ok:#4cc38a;--no:#f08a80;--bd:#2c3446;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:16px}header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+h1{font-size:20px;margin:0;color:var(--ac)}h2{font-size:17px;margin:0 0 10px}nav{display:flex;gap:6px;flex-wrap:wrap}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:12px}
+button,select,input,textarea{font:inherit;color:var(--tx);background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:8px 12px}button{cursor:pointer}
+button.p{background:var(--ac);color:var(--bg);border-color:var(--ac)}button.on{border-color:var(--ac);font-weight:600}
+input,select,textarea{width:100%;margin:4px 0 10px}textarea{min-height:140px;font:13px monospace}
+.opt{display:block;width:100%;text-align:left;margin:6px 0}
+.opt.ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,var(--sf))}.opt.no{border-color:var(--no);background:color-mix(in srgb,var(--no) 15%,var(--sf))}
+.mu{color:var(--mu);font-size:14px}.err{color:var(--no)}.rat{border-left:4px solid var(--ac);padding:6px 12px;margin-top:10px;background:var(--bg);border-radius:4px}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{text-align:left;padding:6px;border-bottom:1px solid var(--bd)}.sc{overflow-x:auto}
+.bar{height:8px;background:var(--bd);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac)}
+.opt,.card button{touch-action:manipulation}
+input[type=file]{padding:8px}
+</style></head><body><main id="app"><p class="mu">Loading…</p></main>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,doc,getDoc,setDoc,deleteDoc,collection,addDoc,getDocs,query,where,limit,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const firebaseConfig={apiKey:"AIzaSyCO4Ho1cKpKflVo1x9cRB7--k2PRJqJ9Ak",authDomain:"cuizlet.firebaseapp.com",projectId:"cuizlet",appId:"1:73598399314:web:9e2ad4db5c57803f9c008b"};
+const ADMIN_EMAIL="kisukeurahara0313@gmail.com";
+const mk=(p,l)=>l.map((n,i)=>[p+" "+(i+1),n]);
+const AREAS={
+"Criminal Law & Jurisprudence (20%)":mk("CLJ",["Introduction to Philippine Criminal Justice System","Human Rights Education","Criminal Law Book 1","Criminal Law Book 2","Evidence","Criminal Procedure and Court Testimony"]),
+"Law Enforcement Administration (15%)":mk("LEA",["Law Enforcement Administration (Inter-Agency Approach)","Comparative Models in Policing","Introduction to Industrial Security Concepts","Law Enforcement Operation and Planning with Crime Mapping","Character Formation 1 (Nationalism and Patriotism)","Character Formation 2 (Leadership, Decision-making, Management and Administration)"]),
+"Crime Detection and Investigation (20%)":mk("CDI",["Fundamentals of Criminal Investigation and Intelligence","Special Crime Investigation 1 with Legal Medicine","Special Crime Investigation 2 with Simulation on Interview and Interrogation","Traffic Management and Accident Investigation with Driving","Technical English 1 (Investigative Report Writing and Presentation)","Fire Protection and Arson Investigation","Vice and Drug Education and Control","Technical English 2 (Legal Forms)","Introduction to Cybercrime and Environmental Laws and Protection"]),
+"Forensic Science (15%)":mk("FORENSIC",["Forensic Photography","Personal Identification Techniques","Forensic Chemistry and Toxicology","Questioned Documents Examination","Lie Detection Techniques","Forensic Ballistics"]),
+"Correctional Administration (10%)":mk("CA",["Institutional Corrections","Non-institutional Corrections","Therapeutic Modalities"]),
+"Criminology (20%)":mk("CRIM",["Introduction to Criminology","Theories of Crime Causation","Human Behavior and Victimology","Professional Conduct and Ethical Standards","Juvenile Delinquency and Juvenile Justice System","Dispute Resolution and Crisis/Incident Management","Criminological Research 1 and 2"])};
+const ALLSUB=Object.fromEntries(Object.values(AREAS).flat());
+const fapp=initializeApp(firebaseConfig),auth=getAuth(fapp),db=getFirestore(fapp);
+const app=document.getElementById("app"),$=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pct=(a,b)=>b?Math.round(100*a/b):0,LD='<p class="mu">Loading…</p>';
+const hid=s=>{let a=0xdeadbeef,b=0x41c6ce57;for(let i=0,c;i<s.length;i++){c=s.charCodeAt(i);a=Math.imul(a^c,2654435761);b=Math.imul(b^c,1597334677)}a=Math.imul(a^(a>>>16),2246822507)^Math.imul(b^(b>>>13),3266489909);b=Math.imul(b^(b>>>16),2246822507)^Math.imul(a^(a>>>13),3266489909);return(4294967296*(2097151&b)+(a>>>0)).toString(36)};
+let U,admin=false,tab="quiz",S={},cache={};
+
+onAuthStateChanged(auth,async u=>{
+  if(!u){admin=false;tab="quiz";S={};cache={};return login()}
+  U=u;const em=u.email.toLowerCase();admin=em===ADMIN_EMAIL.toLowerCase();tab="quiz";S={};cache={};
+  if(!admin){let ok=false;try{ok=(await getDoc(doc(db,"allowed",em))).exists()}catch(e){}if(!ok)return pending(em)}
+  shell();
+});
+function login(){app.innerHTML=`<div class="card"><h1>CrimQuiz</h1><p class="mu">BS Criminology reviewer. Sign in with Google to request access.</p><button class="p" id="g">Sign in with Google</button><p class="err" id="m"></p></div>`;
+  $("g").onclick=()=>signInWithPopup(auth,new GoogleAuthProvider()).catch(e=>$("m").textContent="Sign-in failed: "+e.code)}
+async function pending(em){
+  try{const r=doc(db,"waitlist",em);if(!(await getDoc(r)).exists())await setDoc(r,{email:em,name:U.displayName||em,uid:U.uid,ts:Date.now()})}catch(e){}
+  app.innerHTML=`<div class="card"><h2>Waiting for approval</h2><p>Your request (${esc(em)}) was sent to the administrator. You can open this page again after you are approved.</p><button class="p" id="rf">Check again</button> <button id="o">Sign out</button></div>`;
+  $("rf").onclick=()=>location.reload();$("o").onclick=()=>signOut(auth)}
+function shell(){
+  app.innerHTML=`<header><h1>CrimQuiz</h1><nav id="nav"></nav></header><div id="v"></div>`;
+  const t=[["quiz","Take quiz"],["drafts","Drafts"],["prog","My progress"]];if(admin)t.push(["adm","Admin"]);t.push(["out","Sign out"]);
+  $("nav").innerHTML=t.map(x=>`<button data-t="${x[0]}">${x[1]}</button>`).join("");
+  $("nav").onclick=e=>{const k=e.target.dataset.t;if(!k)return;if(k=="out")return signOut(auth);tab=k;draw()};draw();
+}
+function draw(){if(tab=="adm"&&!admin)tab="quiz";$("v").onclick=null;
+  [...$("nav").children].forEach(b=>{b.classList.toggle("on",b.dataset.t==tab);if(b.dataset.t=="quiz")b.textContent=S.run?"Quiz ●":"Take quiz"});
+  ({quiz:vQuiz,drafts:vDrafts,prog:vProg,adm:vAdm})[tab]()}
+function vQuiz(){
+  if(S.run)return step();
+  $("v").innerHTML=`<div class="card"><h2>Start a quiz</h2><label>Mode<select id="md"><option value="free">Free time – no timer, unfinished quizzes go to Drafts</option><option value="ch">Challenge – timed, never saved to Drafts</option></select></label>
+  <label id="sl" style="display:none">Seconds per question<select id="sec"><option>15</option><option selected>30</option><option>45</option><option>60</option></select></label>
+  <label>Area<select id="ar">${Object.keys(AREAS).map(k=>`<option>${esc(k)}</option>`).join("")}</select></label><label>Subject<select id="sb"></select></label>
+  <label>Number of questions<select id="n"><option>10</option><option>20</option><option>50</option><option>100</option></select></label><button class="p" id="st">Start</button><p class="mu" id="m"></p></div>`;
+  $("md").onchange=()=>$("sl").style.display=$("md").value=="ch"?"block":"none";
+  const fill=()=>$("sb").innerHTML='<option value="">All subjects in this area</option>'+AREAS[$("ar").value].map(s=>`<option value="${s[0]}">${esc(s[0]+" – "+s[1])}</option>`).join("");fill();$("ar").onchange=fill;
+  $("st").onclick=async()=>{
+    const a=$("ar").value,sb=$("sb").value,k=a+"|"+sb;$("m").textContent="Loading…";
+    try{if(!cache[k]){const q=sb?query(collection(db,"questions"),where("area","==",a),where("subject","==",sb),limit(300)):query(collection(db,"questions"),where("area","==",a),limit(300));
+      cache[k]=(await getDocs(q)).docs.map(d=>({id:d.id,...d.data()}))}}catch(e){$("m").textContent="Could not load questions.";return}
+    if(!cache[k].length){$("m").textContent="No questions here yet.";return}
+    const p=cache[k].map(x=>[Math.random(),x]).sort((x,y)=>x[0]-y[0]).map(x=>x[1]).slice(0,+$("n").value),ch=$("md").value=="ch",sec=+$("sec").value;
+    S={run:1,list:p,i:0,score:0,wrong:[],area:a,subject:sb||"All",mode:ch?"ch":"free",sec,draftId:Date.now().toString(36),ans:false,pick:null,deadline:ch?Date.now()+sec*1000:0};draw();
+  };
+}
+function step(){
+  const q=S.list[S.i];if(!q)return done();const ch=S.mode=="ch";
+  $("v").innerHTML=`<div class="card"><p class="mu">${ch?"Challenge":"Free time"} · Question ${S.i+1} of ${S.list.length} · ${esc(q.subject)}</p>${ch?'<div class="bar"><i id="tb"></i></div><p class="mu" id="tt"></p>':""}<h2>${esc(q.q)}</h2><div id="o">${q.o.map((t,i)=>`<button class="opt" data-i="${i}">${"ABCD"[i]}. ${esc(t)}</button>`).join("")}</div><div id="r"></div><p><button id="ex">${ch?"Quit (not saved)":"Exit quiz"}</button></p></div>`;
+  $("ex").onclick=()=>{if(ch&&!confirm("Quit this challenge? Your progress will be lost."))return;S={};draw()};
+  $("o").onclick=e=>{const b=e.target.closest(".opt");if(!b||S.ans)return;answer(+b.dataset.i)};
+  if(S.ans)reveal();
+}
+function answer(k){const q=S.list[S.i];S.ans=true;S.pick=k;if(k==q.a)S.score++;else S.wrong.push(q.id);reveal();saveDraft()}
+function timeUp(){const q=S.list[S.i];S.ans=true;S.pick=-1;S.wrong.push(q.id);if(tab=="quiz"&&$("o"))reveal()}
+function reveal(){
+  const q=S.list[S.i],k=S.pick;[...$("o").children].forEach((c,i)=>{if(i==q.a)c.classList.add("ok");else if(i==k)c.classList.add("no")});
+  $("r").innerHTML=`<p><b class="${k==q.a?"":"err"}">${k<0?"Time's up.":k==q.a?"Correct!":"Incorrect."}</b> Answer: ${"ABCD"[q.a]}</p><div class="rat"><b>Rationale:</b> ${esc(q.r)}</div><p><button class="p" id="nx">${S.i+1<S.list.length?"Next":"Finish"}</button></p>`;
+  $("nx").onclick=()=>{S.i++;S.ans=false;S.pick=null;if(S.mode=="ch")S.deadline=Date.now()+S.sec*1000;step()};
+}
+setInterval(()=>{if(!S.run||S.mode!="ch"||S.ans||!S.deadline)return;const l=S.deadline-Date.now();if(l<=0)return timeUp();const t=$("tt");if(t&&$("tb")){t.textContent=Math.ceil(l/1000)+" s left";$("tb").style.width=(100*l/(S.sec*1000))+"%"}},250);
+async function saveDraft(){if(S.mode!="free")return;try{await setDoc(doc(db,"drafts",U.uid+"_"+S.draftId),{uid:U.uid,ts:Date.now(),area:S.area,subject:S.subject,mode:"free",i:S.i+1,score:S.score,wrong:S.wrong,list:S.list})}catch(e){}}
+async function done(){
+  const s=S,t=s.list.length;S={};$("nav").children[0].textContent="Take quiz";
+  $("v").innerHTML=`<div class="card"><h2>Quiz complete</h2><p>Score: <b>${s.score}/${t}</b> (${pct(s.score,t)}%)</p><p class="mu" id="sv">Saving…</p><button class="p" id="ag">Take another</button></div>`;
+  $("ag").onclick=vQuiz;
+  try{await addDoc(collection(db,"attempts"),{uid:U.uid,email:U.email.toLowerCase(),name:U.displayName||U.email,ts:Date.now(),area:s.area,subject:s.subject,mode:s.mode=="ch"?"challenge":"free",total:t,score:s.score,wrong:s.wrong});$("sv").textContent="Saved to your progress log ✓"}catch(e){$("sv").textContent="Could not save this attempt."}
+  if(s.mode=="free")try{await deleteDoc(doc(db,"drafts",U.uid+"_"+s.draftId))}catch(e){}
+}
+async function vDrafts(){
+  $("v").innerHTML=LD;let D;
+  try{D=(await getDocs(query(collection(db,"drafts"),where("uid","==",U.uid)))).docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.ts-a.ts)}catch(e){$("v").innerHTML='<div class="card err">Could not load drafts.</div>';return}
+  if(!D.length){$("v").innerHTML='<div class="card">No drafts. A free-time quiz you leave unfinished is saved here automatically. Challenge quizzes are never saved.</div>';return}
+  $("v").innerHTML=D.map(d=>`<div class="card"><b>${esc(d.area)}</b><br><span class="mu">${esc(d.subject)} · answered ${Math.min(d.i,d.list.length)} of ${d.list.length} · ${new Date(d.ts).toLocaleDateString()}</span><p><button class="p" data-c="${esc(d.id)}">Continue</button> <button data-x="${esc(d.id)}">Delete</button></p></div>`).join("");
+  $("v").onclick=async e=>{const c=e.target.dataset.c,x=e.target.dataset.x;
+    if(x&&confirm("Delete this draft?")){await deleteDoc(doc(db,"drafts",x));vDrafts()}
+    if(c){const d=D.find(z=>z.id==c);if(S.run&&S.mode=="ch"&&!confirm("Your running challenge will be lost. Continue?"))return;
+      S={run:1,list:d.list,i:d.i,score:d.score,wrong:d.wrong,area:d.area,subject:d.subject,mode:"free",draftId:c.slice(U.uid.length+1),ans:false,pick:null};tab="quiz";draw()}};
+}
+async function vProg(){
+  $("v").innerHTML=LD;
+  const A=(await getDocs(query(collection(db,"attempts"),where("uid","==",U.uid)))).docs.map(d=>d.data()).sort((a,b)=>b.ts-a.ts);
+  if(!A.length){$("v").innerHTML='<div class="card">No finished quizzes yet.</div>';return}
+  const by={};A.forEach(a=>{by[a.area]=by[a.area]||[0,0];by[a.area][0]+=a.score;by[a.area][1]+=a.total});
+  $("v").innerHTML=`<div class="card"><h2>By area</h2>${Object.entries(by).map(([k,x])=>`<p>${esc(k)} — ${pct(x[0],x[1])}% <span class="mu">(${x[0]}/${x[1]})</span></p><div class="bar"><i style="width:${pct(x[0],x[1])}%"></i></div>`).join("")}</div>
+  <div class="card sc"><h2>History</h2><table><tr><th>Date</th><th>Mode</th><th>Area</th><th>Subject</th><th>Score</th></tr>${A.map(a=>`<tr><td>${new Date(a.ts).toLocaleDateString()}</td><td>${a.mode=="challenge"?"Challenge":"Free"}</td><td>${esc(a.area)}</td><td>${esc(a.subject)}</td><td>${a.score}/${a.total} (${pct(a.score,a.total)}%)</td></tr>`).join("")}</table></div>`;
+}
+async function vAdm(){
+  if(!admin){tab="quiz";return draw()}
+  $("v").innerHTML=LD;let wl,al,at;
+  try{[wl,al,at]=await Promise.all([getDocs(collection(db,"waitlist")),getDocs(collection(db,"allowed")),getDocs(collection(db,"attempts"))])}catch(e){$("v").innerHTML='<div class="card err">Access denied.</div>';return}
+  const A=at.docs.map(d=>d.data());
+  const W=wl.docs.map(d=>{const x=d.data();return `<tr><td>${esc(x.name)}<br><span class="mu">${esc(d.id)}</span></td><td><button class="p" data-a="${esc(d.id)}" data-n="${esc(x.name)}">Allow</button> <button data-x="${esc(d.id)}">Decline</button></td></tr>`}).join("");
+  const R=al.docs.map(d=>{const m=A.filter(a=>a.email==d.id),s=m.reduce((p,a)=>p+a.score,0),t=m.reduce((p,a)=>p+a.total,0);
+    return `<tr><td>${esc(d.data().label)}<br><span class="mu">${esc(d.id)}</span></td><td>${m.length}</td><td>${t?pct(s,t)+"%":"–"}</td><td><button data-d="${esc(d.id)}">Remove</button></td></tr>`}).join("");
+  $("v").innerHTML=`<div class="card sc"><h2>Waitlist (${wl.size})</h2><table>${W||'<tr><td class="mu">Nobody is waiting.</td></tr>'}</table></div>
+  <div class="card sc"><h2>Approved students (${al.size})</h2><table><tr><th>Student</th><th>Quizzes</th><th>Avg</th><th></th></tr>${R||'<tr><td colspan="4" class="mu">None yet</td></tr>'}</table></div>
+  <div class="card"><h2>Import questions</h2><p class="mu">Choose a .json file. Importing the same question again updates it instead of duplicating it.</p><input id="jf" type="file" accept=".json,application/json"><button class="p" id="imp">Import</button><p class="mu" id="im"></p></div>`;
+  $("v").onclick=async e=>{const d=e.target.dataset;
+    if(d.d){if(confirm("Remove this student's access?")){await deleteDoc(doc(db,"allowed",d.d));vAdm()}}
+    else if(d.a){await setDoc(doc(db,"allowed",d.a),{label:d.n,ts:Date.now()});await deleteDoc(doc(db,"waitlist",d.a));vAdm()}
+    else if(d.x){await deleteDoc(doc(db,"waitlist",d.x));vAdm()}};
+  $("imp").onclick=async()=>{const f=$("jf").files[0];if(!f){$("im").textContent="Choose a .json file first.";return}
+    let a;try{a=JSON.parse((await f.text()).replace(/^\uFEFF/,""));if(!Array.isArray(a))throw new Error("The file must contain a list [ ... ].")}catch(e){$("im").textContent="Invalid JSON: "+e.message;return}
+    const ok=a.filter(x=>AREAS[x.area]&&ALLSUB[x.subject]&&x.q&&Array.isArray(x.o)&&x.o.length>=2&&x.a in x.o&&x.r);let n=0;
+    try{for(let i=0;i<ok.length;i+=400){const b=writeBatch(db);ok.slice(i,i+400).forEach(x=>b.set(doc(db,"questions",hid(x.subject+"|"+x.q)),{area:x.area,subject:x.subject,q:x.q,o:x.o,a:x.a,r:x.r}));await b.commit();n+=Math.min(400,ok.length-i);$("im").textContent=`Imported ${n}…`}}catch(e){$("im").textContent="Import failed: "+e.code;return}
+    cache={};$("im").textContent=`Imported ${n} of ${a.length}. Skipped ${a.length-n} invalid.`};
+}
+</script></body></html>
